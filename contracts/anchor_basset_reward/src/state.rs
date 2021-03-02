@@ -17,6 +17,8 @@ pub static PREFIX_HOLDERS: &[u8] = b"holders";
 pub struct Config {
     pub hub_contract: CanonicalAddr,
     pub reward_denom: String,
+    pub lido_fee_address: HumanAddr,
+    pub lido_fee_rate: Decimal,
 }
 
 pub fn store_config<S: Storage>(storage: &mut S, config: &Config) -> StdResult<()> {
@@ -74,6 +76,7 @@ pub fn read_holder<S: Storage>(storage: &S, holder_address: &CanonicalAddr) -> S
 // settings for pagination
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
+
 pub fn read_holders<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     start_after: Option<CanonicalAddr>,

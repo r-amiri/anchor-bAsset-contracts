@@ -7,6 +7,8 @@ use cosmwasm_std::{Decimal, HumanAddr, Uint128};
 pub struct InitMsg {
     pub hub_contract: HumanAddr,
     pub reward_denom: String,
+    pub lido_fee_address: HumanAddr,
+    pub lido_fee_rate: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

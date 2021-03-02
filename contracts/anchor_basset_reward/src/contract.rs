@@ -20,6 +20,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     let conf = Config {
         hub_contract: deps.api.canonical_address(&msg.hub_contract)?,
         reward_denom: msg.reward_denom,
+        lido_fee_address: msg.lido_fee_address,
+        lido_fee_rate: msg.lido_fee_rate,
     };
 
     store_config(&mut deps.storage, &conf)?;

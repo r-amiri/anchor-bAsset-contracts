@@ -35,11 +35,14 @@ use crate::testing::mock_querier::{
 use std::str::FromStr;
 
 const DEFAULT_REWARD_DENOM: &str = "uusd";
+const DEFAULT_LIDO_FEE_ADDRESS: &str = "lido_fee_addr";
 
 fn default_init() -> InitMsg {
     InitMsg {
         hub_contract: HumanAddr::from(MOCK_HUB_CONTRACT_ADDR),
         reward_denom: DEFAULT_REWARD_DENOM.to_string(),
+        lido_fee_address: HumanAddr::from(DEFAULT_LIDO_FEE_ADDRESS),
+        lido_fee_rate: Decimal::from_ratio(Uint128(5), Uint128(100)),
     }
 }
 
@@ -70,7 +73,7 @@ fn proper_init() {
         StateResponse {
             global_index: Decimal::zero(),
             total_balance: Uint128(0u128),
-            prev_reward_balance: Uint128::zero()
+            prev_reward_balance: Uint128::zero(),
         }
     );
 }
@@ -113,15 +116,15 @@ pub fn swap_to_reward_denom() {
                     denom: "ukrw".to_string(),
                     amount: Uint128(1000u128),
                 },
-                DEFAULT_REWARD_DENOM.to_string()
+                DEFAULT_REWARD_DENOM.to_string(),
             ),
             create_swap_msg(
                 HumanAddr::from(MOCK_CONTRACT_ADDR),
                 Coin {
                     denom: "usdr".to_string(),
-                    amount: Uint128(50u128)
+                    amount: Uint128(50u128),
                 },
-                DEFAULT_REWARD_DENOM.to_string()
+                DEFAULT_REWARD_DENOM.to_string(),
             ),
         ]
     );
@@ -168,10 +171,10 @@ fn update_global_index() {
             prev_reward_balance: Uint128::zero(),
         },
     )
-    .unwrap();
+        .unwrap();
 
-    // claimed_rewards = 100, total_balance = 100
-    // global_index == 1
+    // claimed_rewards = 95 (due to a 5% Lido fee), total_balance = 100
+    // global_index == 0.95 (due to a 5% Lido fee)
     handle(&mut deps, env, msg).unwrap();
 
     let res = query(&deps, QueryMsg::State {}).unwrap();
@@ -179,9 +182,9 @@ fn update_global_index() {
     assert_eq!(
         state_response,
         StateResponse {
-            global_index: Decimal::one(),
+            global_index: Decimal::from_ratio(95u128, 100u128),
             total_balance: Uint128::from(100u128),
-            prev_reward_balance: Uint128::from(100u128)
+            prev_reward_balance: Uint128::from(95u128),
         }
     );
 }
@@ -222,7 +225,7 @@ fn increase_balance() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
@@ -234,8 +237,8 @@ fn increase_balance() {
         }
     );
 
-    // claimed_rewards = 100, total_balance = 100
-    // global_index == 1
+    // claimed_rewards = 95 (due to a 5% Lido fee), total_balance = 100
+    // global_index == 0.95 (due to a 5% Lido fee)
     let env = mock_env(MOCK_HUB_CONTRACT_ADDR, &[]);
     let msg = HandleMsg::UpdateGlobalIndex {};
     handle(&mut deps, env, msg).unwrap();
@@ -253,15 +256,15 @@ fn increase_balance() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
         HolderResponse {
             address: HumanAddr::from("addr0000"),
             balance: Uint128::from(200u128),
-            index: Decimal::one(),
-            pending_rewards: Decimal::from_str("100").unwrap(),
+            index: Decimal::from_ratio(95u128, 100u128),
+            pending_rewards: Decimal::from_str("95").unwrap(),
         }
     );
 }
@@ -302,7 +305,7 @@ fn increase_balance_with_decimals() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
@@ -314,8 +317,8 @@ fn increase_balance_with_decimals() {
         }
     );
 
-    // claimed_rewards = 100000 , total_balance = 11
-    // global_index == 9077.727272727272727272
+    // claimed_rewards = 95238 , total_balance = 11
+    // global_index == 8658.0
     let env = mock_env(MOCK_HUB_CONTRACT_ADDR, &[]);
     let msg = HandleMsg::UpdateGlobalIndex {};
     handle(&mut deps, env, msg).unwrap();
@@ -333,10 +336,10 @@ fn increase_balance_with_decimals() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     let index = decimal_multiplication_in_256(
-        Decimal::from_ratio(Uint128(100000), Uint128(11)),
+        Decimal::from_ratio(Uint128(95238), Uint128(11)),
         Decimal::one(),
     );
     let user_pend_reward = decimal_multiplication_in_256(
@@ -420,15 +423,15 @@ fn decrease_balance() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
         HolderResponse {
             address: HumanAddr::from("addr0000"),
             balance: Uint128::zero(),
-            index: Decimal::one(),
-            pending_rewards: Decimal::from_str("100").unwrap(),
+            index: Decimal::from_ratio(95u128, 100u128),
+            pending_rewards: Decimal::from_str("95").unwrap(),
         }
     );
 }
@@ -462,7 +465,7 @@ fn claim_rewards() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
@@ -474,8 +477,8 @@ fn claim_rewards() {
         }
     );
 
-    // claimed_rewards = 100, total_balance = 100
-    // global_index == 1
+    // claimed_rewards = 95 (due to a 5% Lido fee), total_balance = 100
+    // global_index == 0.95 (due to a 5% Lido fee)
     let env = mock_env(MOCK_HUB_CONTRACT_ADDR, &[]);
     let msg = HandleMsg::UpdateGlobalIndex {};
     handle(&mut deps, env, msg).unwrap();
@@ -490,14 +493,14 @@ fn claim_rewards() {
             to_address: HumanAddr::from("addr0000"),
             amount: vec![Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::from(99u128), // 1% tax
-            },]
+                amount: Uint128::from(94u128), // 1% tax + 5% Lido fee
+            }, ],
         })]
     );
 
     // Set recipient
-    // claimed_rewards = 100, total_balance = 100
-    // global_index == 1
+    // claimed_rewards = 95 (due to a 5% Lido fee), total_balance = 100
+    // global_index == 0.95 (due to a 5% Lido fee)
     let env = mock_env(MOCK_HUB_CONTRACT_ADDR, &[]);
     let msg = HandleMsg::UpdateGlobalIndex {};
     handle(&mut deps, env, msg).unwrap();
@@ -514,8 +517,8 @@ fn claim_rewards() {
             to_address: HumanAddr::from("addr0001"),
             amount: vec![Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::from(99u128), // 1% tax
-            },]
+                amount: Uint128::from(94u128), // 1% tax
+            }, ],
         })]
     );
 }
@@ -549,7 +552,7 @@ fn claim_rewards_with_decimals() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
@@ -561,8 +564,8 @@ fn claim_rewards_with_decimals() {
         }
     );
 
-    // claimed_rewards = 1000000, total_balance = 11
-    // global_index ==
+    // claimed_rewards = 95237, total_balance = 11
+    // global_index == 8657.90909090909090909 (5% Lido Fee)
     let env = mock_env(MOCK_HUB_CONTRACT_ADDR, &[]);
 
     let msg = HandleMsg::UpdateGlobalIndex {};
@@ -578,8 +581,8 @@ fn claim_rewards_with_decimals() {
             to_address: HumanAddr::from("addr0000"),
             amount: vec![Coin {
                 denom: "uusd".to_string(),
-                amount: Uint128::from(99007u128), // 1% tax
-            },]
+                amount: Uint128::from(94293u128), // 1% tax + 5% Lido fee
+            }, ],
         })]
     );
 
@@ -589,10 +592,10 @@ fn claim_rewards_with_decimals() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     let index = decimal_multiplication_in_256(
-        Decimal::from_ratio(Uint128(99999), Uint128(11)),
+        Decimal::from_ratio(Uint128(95237), Uint128(11)),
         Decimal::one(),
     );
     assert_eq!(
@@ -601,7 +604,7 @@ fn claim_rewards_with_decimals() {
             address: HumanAddr::from("addr0000"),
             balance: Uint128::from(11u128),
             index,
-            pending_rewards: Decimal::from_str("0.999999999999999991").unwrap(),
+            pending_rewards: Decimal::from_str("0.999999999999999990").unwrap(),
         }
     );
 
@@ -612,7 +615,7 @@ fn claim_rewards_with_decimals() {
         StateResponse {
             global_index: index,
             total_balance: Uint128(11u128),
-            prev_reward_balance: Uint128(1)
+            prev_reward_balance: Uint128(1),
         }
     );
 }
@@ -660,7 +663,7 @@ fn query_holders() {
             limit: None,
         },
     )
-    .unwrap();
+        .unwrap();
     let holders_response: HoldersResponse = from_binary(&res).unwrap();
     assert_eq!(
         holders_response,
@@ -696,7 +699,7 @@ fn query_holders() {
             limit: Some(1),
         },
     )
-    .unwrap();
+        .unwrap();
     let holders_response: HoldersResponse = from_binary(&res).unwrap();
     assert_eq!(
         holders_response,
@@ -718,7 +721,7 @@ fn query_holders() {
             limit: None,
         },
     )
-    .unwrap();
+        .unwrap();
     let holders_response: HoldersResponse = from_binary(&res).unwrap();
     assert_eq!(
         holders_response,
@@ -748,7 +751,7 @@ fn query_holders() {
             limit: Some(1),
         },
     )
-    .unwrap();
+        .unwrap();
     let holders_response: HoldersResponse = from_binary(&res).unwrap();
     assert_eq!(
         holders_response,
@@ -795,7 +798,7 @@ fn proper_prev_balance() {
             prev_reward_balance: rewards,
         },
     )
-    .unwrap();
+        .unwrap();
 
     let holder = Holder {
         balance: amount1,
@@ -810,7 +813,7 @@ fn proper_prev_balance() {
             .unwrap(),
         &holder,
     )
-    .unwrap();
+        .unwrap();
 
     let holder = Holder {
         balance: amount2,
@@ -825,7 +828,7 @@ fn proper_prev_balance() {
             .unwrap(),
         &holder,
     )
-    .unwrap();
+        .unwrap();
 
     let holder = Holder {
         balance: amount3,
@@ -840,7 +843,7 @@ fn proper_prev_balance() {
             .unwrap(),
         &holder,
     )
-    .unwrap();
+        .unwrap();
 
     let msg = HandleMsg::ClaimRewards { recipient: None };
     let env = mock_env("addr0000", &[]);
@@ -861,7 +864,7 @@ fn proper_prev_balance() {
         StateResponse {
             global_index,
             total_balance: all_balance,
-            prev_reward_balance: Uint128(1)
+            prev_reward_balance: Uint128(1),
         }
     );
 
@@ -871,7 +874,7 @@ fn proper_prev_balance() {
             address: HumanAddr::from("addr0000"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
@@ -889,7 +892,7 @@ fn proper_prev_balance() {
             address: HumanAddr::from("addr0001"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,
@@ -907,7 +910,7 @@ fn proper_prev_balance() {
             address: HumanAddr::from("addr0002"),
         },
     )
-    .unwrap();
+        .unwrap();
     let holder_response: HolderResponse = from_binary(&res).unwrap();
     assert_eq!(
         holder_response,

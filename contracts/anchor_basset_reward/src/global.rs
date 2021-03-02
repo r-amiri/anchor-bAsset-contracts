@@ -1,11 +1,9 @@
 use crate::state::{read_config, read_state, store_state, Config, State};
 
 use crate::math::decimal_summation_in_256;
-use cosmwasm_std::{
-    log, Api, CosmosMsg, Decimal, Env, Extern, HandleResponse, Querier, StdError, StdResult,
-    Storage,
-};
+use cosmwasm_std::{log, Api, CosmosMsg, Decimal, Env, Extern, HandleResponse, Querier, StdError, StdResult, Storage, BankMsg, Coin};
 use terra_cosmwasm::{create_swap_msg, TerraMsgWrapper};
+use basset::{deduct_tax, compute_lido_fee};
 
 /// Swap all native tokens to reward_denom
 /// Only hub_contract is allowed to execute
@@ -70,15 +68,32 @@ pub fn handle_update_global_index<S: Storage, A: Api, Q: Querier>(
     // Load the reward contract balance
     let balance = deps
         .querier
-        .query_balance(env.contract.address, reward_denom.as_str())
+        .query_balance(env.contract.address.clone(), reward_denom.as_str())
         .unwrap();
 
     let previous_balance = state.prev_reward_balance;
 
     // claimed_rewards = current_balance - prev_balance;
-    let claimed_rewards = (balance.amount - previous_balance)?;
+    let mut claimed_rewards = (balance.amount - previous_balance)?;
 
-    state.prev_reward_balance = balance.amount;
+    // subtract the Lido fee from claimed rewards and send the fee to Lido.
+    let lido_fee = compute_lido_fee(claimed_rewards, config.lido_fee_rate)?;
+    claimed_rewards = (claimed_rewards - lido_fee)?;
+
+    let mut msgs: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
+    msgs.push(BankMsg::Send {
+        from_address: env.contract.address,
+        to_address: config.lido_fee_address,
+        amount: vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: config.reward_denom,
+                amount: lido_fee,
+            },
+        )?],
+    }.into());
+
+    state.prev_reward_balance = (balance.amount - lido_fee)?;
 
     // global_index += claimed_rewards / total_balance;
     state.global_index = decimal_summation_in_256(
@@ -88,10 +103,11 @@ pub fn handle_update_global_index<S: Storage, A: Api, Q: Querier>(
     store_state(&mut deps.storage, &state)?;
 
     let res = HandleResponse {
-        messages: vec![],
+        messages: msgs,
         log: vec![
             log("action", "update_global_index"),
             log("claimed_rewards", claimed_rewards),
+            log("lido_fee", lido_fee),
         ],
         data: None,
     };

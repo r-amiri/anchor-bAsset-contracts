@@ -14,9 +14,9 @@ pub fn compute_tax<S: Storage, A: Api, Q: Querier>(
     Ok(std::cmp::min(
         (coin.amount
             - coin.amount.multiply_ratio(
-                DECIMAL_FRACTION,
-                DECIMAL_FRACTION * tax_rate + DECIMAL_FRACTION,
-            ))?,
+            DECIMAL_FRACTION,
+            DECIMAL_FRACTION * tax_rate + DECIMAL_FRACTION,
+        ))?,
         tax_cap,
     ))
 }
@@ -30,4 +30,12 @@ pub fn deduct_tax<S: Storage, A: Api, Q: Querier>(
         denom: coin.denom,
         amount: (coin.amount - tax_amount)?,
     })
+}
+
+pub fn compute_lido_fee(amount: Uint128, fee_rate: Decimal) -> StdResult<Uint128> {
+    Ok(amount
+        - amount.multiply_ratio(
+        DECIMAL_FRACTION,
+        DECIMAL_FRACTION * fee_rate + DECIMAL_FRACTION,
+    ))?
 }
